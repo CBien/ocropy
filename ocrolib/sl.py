@@ -3,7 +3,7 @@
 ################################################################
 
 import numpy
-from pylab import mean
+from numpy import mean
 
 ### inquiry functions
 

@@ -1,7 +1,15 @@
 from toplevel import *
 from pylab import *
-from scipy.ndimage import filters,interpolation
-import sl,morph
+from scipy.ndimage import filters, interpolation
+import sl, morph
+import numpy as np
+
+# copied from matplotlib.mlab :
+def find(condition):
+    "Return the indices where ravel(condition) is true"
+    res, = np.nonzero(np.ravel(condition))
+    return res
+
 
 def B(a):
     if a.dtype==dtype('B'): return a
@@ -9,6 +17,7 @@ def B(a):
 
 class record:
     def __init__(self,**kw): self.__dict__.update(kw)
+
 
 def blackout_images(image,ticlass):
     """Takes a page image and a ticlass text/image classification image and replaces

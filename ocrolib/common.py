@@ -18,7 +18,13 @@ import multiprocessing
 import lstm
 import pylab
 
-from pylab import imshow
+try:
+    from pylab import imshow
+except ImportError:
+    import logging
+    logging.getLogger(__name__).warning(
+            'Warning : Could not import matplotlib : graphical debug will not work')
+
 import morph
 from toplevel import *
 
@@ -995,7 +1001,6 @@ def showrgb(r,g=None,b=None):
     imshow(array([r,g,b]).transpose([1,2,0]))
 
 def showgrid(l,cols=None,n=400,titles=None,xlabels=None,ylabels=None,**kw):
-    import pylab
     if "cmap" not in kw: kw["cmap"] = pylab.cm.gray
     if "interpolation" not in kw: kw["interpolation"] = "nearest"
     n = minimum(n,len(l))
