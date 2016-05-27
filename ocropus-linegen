@@ -11,8 +11,10 @@ from scipy.misc import imsave
 import ocrolib
 
 import argparse
-parser = argparse.ArgumentParser(description = "Generate text line training data")
-parser.add_argument('-o','--base',default='linegen',help='output directory, default: %(default)s')
+parser = argparse.ArgumentParser(
+    description = "Generate text line training data.")
+parser.add_argument('-o','--base', default='linegen',
+                    help='output directory, default: %(default)s')
 parser.add_argument('-r','--distort',type=float,default=1.0)
 parser.add_argument('-R','--dsigma',type=float,default=20.0)
 parser.add_argument('-f','--fonts',default=None)
@@ -20,17 +22,20 @@ parser.add_argument('-F','--fontlist',default=None)
 parser.add_argument('-t','--texts',default=None)
 parser.add_argument('-T','--textlist',default=None)
 parser.add_argument('-m','--maxlines',default=200,type=int,
-    help='max # lines for each directory, default: %(default)s')
+    help='max # lines for each font, default: %(default)s')
 parser.add_argument('-e','--degradations',default="lo",
     help="lo, med, or hi; or give a file, default: %(default)s")
 parser.add_argument('-j','--jitter',default=0.5)
 parser.add_argument('-s','--sizes',default="40-70")
 parser.add_argument('-d','--display',action="store_true")
 parser.add_argument('--numdir',action="store_true")
+parser.add_argument('-a', '--all-in-one',action="store_true",
+    help='Put all data in one folder instead of one for each font')
 parser.add_argument('-C','--cleanup',default='[_~#]')
 parser.add_argument('-D','--debug_show',default=None,
     help="select a class for stepping through")
 args = parser.parse_args()
+
 
 if "-" in args.sizes:
     lo,hi = args.sizes.split("-")
@@ -82,7 +87,7 @@ elif args.fontlist is not None:
 else:
     print "use -f or -F arguments to specify fonts"
     sys.exit(1)
-assert len(fonts)>0,"no fonts?"
+assert fonts, "no fonts?"
 print "fonts",fonts
 
 if args.texts is not None:
@@ -96,7 +101,7 @@ elif args.textlist is not None:
 else:
     print "use -t or -T arguments to specify texts"
     sys.exit(1)
-assert len(texts)>0,"no texts?"
+assert texts, "no texts?"
 
 lines = []
 for text in texts:
@@ -108,18 +113,19 @@ for text in texts:
             if len(line)<1: continue
             lines.append(line)
 print "got",len(lines),"lines"
-assert len(lines)>0
+assert lines, "no lines?"
 lines = list(set(lines))
 print "got",len(lines),"unique lines"
+
 
 def rgeometry(image,eps=0.03,delta=0.3):
     m = array([[1+eps*randn(),0.0],[eps*randn(),1.0+eps*randn()]])
     w,h = image.shape
     c = array([w/2.0,h/2])
     d = c-dot(m,c)+array([randn()*delta,randn()*delta])
-    return interpolation.affine_transform(image,m,offset=d,order=1,mode='constant',cval=image[0,0])
+    return interpolation.affine_transform(
+        image, m, offset=d, order=1, mode='constant', cval=image[0, 0])
 
-from scipy.ndimage import interpolation,filters
 
 def rdistort(image,distort=3.0,dsigma=10.0,cval=0):
     h,w = image.shape
@@ -172,11 +178,10 @@ def genline(text,fontfile=None,size=36,sigma=0.5,threshold=0.5):
     image = Image.new("L",(6000,200))
     draw = ImageDraw.Draw(image)
     draw.rectangle((0,0,6000,6000),fill="white")
-    #print "\t",size,font
     draw.text((250,20),text,fill="black",font=font)
     a = asarray(image,'f')
-    a = a*1.0/amax(a)
-    if sigma>0.0:
+    a = a * 1.0 / amax(a)
+    if sigma > 0.0:
         a = filters.gaussian_filter(a,sigma)
     a += clip(randn(*a.shape)*0.2,-0.25,0.25)
     a = rgeometry(a)
@@ -184,47 +189,55 @@ def genline(text,fontfile=None,size=36,sigma=0.5,threshold=0.5):
     a = crop(a,pad=3)
     # FIXME add grid warping here
     # clf(); ion(); gray(); imshow(a); ginput(1,0.1)
-    del draw
-    del image
     return a
 
 lines_per_size = args.maxlines//len(sizes)
-for pageno,font in enumerate(fonts):
-    if args.numdir:
+
+for pageno, font in enumerate(fonts):
+    fbase = re.sub(r'^[./]*','',font)
+    fbase = re.sub(r'[.][^/]*$','',fbase)
+    fbase = re.sub(r'[/]','_',fbase)
+    if args.all_in_one:
+        pagedir = base
+    elif args.numdir:
         pagedir = "%s/%04d"%(base,pageno+1)
     else:
-        fbase = re.sub(r'^[./]*','',font)
-        fbase = re.sub(r'[.][^/]*$','',fbase)
-        fbase = re.sub(r'[/]','_',fbase)
         pagedir = "%s/%s"%(base,fbase)
-    os.mkdir(pagedir)
-    print "===",pagedir,font
-    lineno = 0
-    while lineno<args.maxlines:
-        (sigma,ssigma,threshold,sthreshold) = pyrandom.choice(degradations)
-        sigma += (2*rand()-1)*ssigma
-        threshold += (2*rand()-1)*sthreshold
+    if not os.path.exists(pagedir):
+        os.mkdir(pagedir)
+    print "===", fbase, font
+    if not args.all_in_one:
+        with open(pagedir + ".info", "w") as stream:
+            stream.write("%s\n" % font)
+    
+    for lineno in range(args.maxlines):
+        sigma, ssigma, threshold, sthreshold = pyrandom.choice(degradations)
+        sigma += (2*rand()-1) * ssigma
+        threshold += (2*rand()-1) * sthreshold
         line = pyrandom.choice(lines)
         size = pyrandom.choice(sizes)
-        with open(pagedir+".info","w") as stream:
-            stream.write("%s\n"%font)
+        
         try:
             image = genline(text=line,fontfile=font,
                 size=size,sigma=sigma,threshold=threshold)
         except:
             traceback.print_exc()
             continue
-        if amin(image.shape)<10: continue
-        if amax(image)<0.5: continue
-        if args.distort>0:
+        if amin(image.shape) < 10:
+            continue
+        if amax(image) < 0.5:
+            continue
+        if args.distort > 0:
             image = rdistort(image,args.distort,args.dsigma,cval=amax(image))
         if args.display:
             gray()
             clf(); imshow(image); ginput(1,0.1)
-        fname = pagedir+"/01%04d"%lineno
+        if args.all_in_one:
+            fname = pagedir + "/%s-%05d" % (fbase, lineno)
+        else:
+            fname = pagedir + "/01%04d" % lineno
         imsave(fname+".bin.png",image)
         gt = ocrolib.normalize_text(line)
-        with codecs.open(fname+".gt.txt","w",'utf-8') as stream:
-            stream.write(gt+"\n")
+        with codecs.open(fname + ".gt.txt", "w", 'utf-8') as stream:
+            stream.write(gt + "\n")
         print "%5.2f %5.2f %3d\t%s"%(sigma,threshold,size,line)
-        lineno += 1
