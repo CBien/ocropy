@@ -147,8 +147,8 @@ def bounding_box(a):
 
 base = args.base
 print "base",base
-os.system("rm -rf "+base)
-os.mkdir(base)
+if not os.path.exists(base):
+    os.mkdir(base)
 
 def crop(image,pad=1):
     [[r,c]] = measurements.find_objects(array(image==0,'i'))
