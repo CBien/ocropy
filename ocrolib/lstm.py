@@ -301,6 +301,14 @@ class Softmax(Network):
         self.W2 = randu(No,Nh+1)*initial_range
         self.DW2 = zeros((No,Nh+1))
 
+    def postLoad(self):
+        self.DW2 = zeros(self.W2.shape)
+
+    def preSave(self):
+        for var in ('state', 'DW2'):
+            if hasattr(self, var):
+                delattr(self, var)
+
     def ninputs(self):
         return self.Nh
 
@@ -654,6 +662,12 @@ class Stacked(Network):
         for sub in self.nets:
             for x in sub.walk(): yield x
 
+    def preSave(self):
+        self.dstats = defaultdict(list)  # reset
+        for delta in ('deltas', 'ldeltas'):
+            if hasattr(self, delta):
+                delattr(self, delta)
+
     def ninputs(self):
         return self.nets[0].ninputs()
 
@@ -948,11 +962,16 @@ class SeqRecognizer:
         for x in self.lstm.walk():
             yield x
 
-    def clear_log(self):
+    def clear_log(self, deallocate_tempvars=False):
         self.command_log = []
         self.error_log = []
         self.cerror_log = []
         self.key_log = []
+        if deallocate_tempvars:
+            for attrname in ('outputs', 'targets', 'aligned'):
+                if hasattr(self, attrname):
+                    delattr(self, attrname)
+
     def __setstate__(self,state):
         self.__dict__.update(state)
         self.upgrade()
@@ -965,7 +984,7 @@ class SeqRecognizer:
         if "key_log" not in dir(self): self.key_log = []
 
     def info(self):
-        self.net.info()
+        self.lstm.info()
 
     def setLearningRate(self,r,momentum=0.9):
         self.lstm.setLearningRate(r,momentum)
