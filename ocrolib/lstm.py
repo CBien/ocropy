@@ -23,6 +23,7 @@
 #
 # Author: Thomas M. Breuel
 # License: Apache 2.0
+import unicodedata
 
 import common as ocrolib
 from pylab import *
@@ -30,7 +31,7 @@ from collections import defaultdict
 from ocrolib.native import *
 from ocrolib import edist
 import nutils
-import unicodedata
+from scipy.ndimage import measurements, filters
 
 initial_range = 0.1
 
@@ -242,18 +243,23 @@ class Network:
 
 '''
 
+
 class Logreg(Network):
     """A logistic regression layer, a straightforward implementation
     of the logistic regression equations. Uses 1-augmented vectors."""
+
     def __init__(self,Nh,No,initial_range=initial_range,rand=rand):
         self.Nh = Nh
         self.No = No
         self.W2 = randu(No,Nh+1)*initial_range
         self.DW2 = zeros((No,Nh+1))
+
     def ninputs(self):
         return self.Nh
+
     def noutputs(self):
         return self.No
+
     def forward(self,ys):
         n = len(ys)
         inputs,zs = [None]*n,[None]*n
@@ -262,6 +268,7 @@ class Logreg(Network):
             zs[i] = sigmoid(dot(self.W2,inputs[i]))
         self.state = (inputs,zs)
         return zs
+
     def backward(self,deltas):
         inputs,zs = self.state
         n = len(zs)
@@ -273,26 +280,33 @@ class Logreg(Network):
         self.dzspre = dzspre
         self.DW2 = sumouter(dzspre,inputs)
         return dys
+
     def info(self):
         vars = sorted("W2".split())
         for v in vars:
             a = array(getattr(self,v))
             print v,a.shape,amin(a),amax(a)
+
     def weights(self):
         yield self.W2,self.DW2,"Logreg"
+
 
 class Softmax(Network):
     """A softmax layer, a straightforward implementation
     of the softmax equations. Uses 1-augmented vectors."""
+
     def __init__(self,Nh,No,initial_range=initial_range,rand=rand):
         self.Nh = Nh
         self.No = No
         self.W2 = randu(No,Nh+1)*initial_range
         self.DW2 = zeros((No,Nh+1))
+
     def ninputs(self):
         return self.Nh
+
     def noutputs(self):
         return self.No
+
     def forward(self,ys):
         """Forward propagate activations. This updates the internal
         state for a subsequent call to `backward` and returns the output
@@ -307,6 +321,7 @@ class Softmax(Network):
             zs[i] = temp
         self.state = (inputs,zs)
         return zs
+
     def backward(self,deltas):
         inputs,zs = self.state
         n = len(zs)
@@ -317,28 +332,35 @@ class Softmax(Network):
             dys[i] = dot(dzspre[i],self.W2)[1:]
         self.DW2 = sumouter(dzspre,inputs)
         return dys
+
     def info(self):
         vars = sorted("W2".split())
         for v in vars:
             a = array(getattr(self,v))
             print v,a.shape,amin(a),amax(a)
+
     def weights(self):
         yield self.W2,self.DW2,"Softmax"
+
 
 class MLP(Network):
     """A multilayer perceptron (direct implementation). Effectively,
     two `Logreg` layers stacked on top of each other, or a simple direct
     implementation of the MLP equations. This is mainly used for testing."""
+
     def __init__(self,Ni,Nh,No,initial_range=initial_range,rand=randu):
         self.Ni = Ni
         self.Nh = Nh
         self.No = No
         self.W1 = rand(Nh,Ni+1)*initial_range
         self.W2 = rand(No,Nh+1)*initial_range
+
     def ninputs(self):
         return self.Ni
+
     def noutputs(self):
         return self.No
+
     def forward(self,xs):
         n = len(xs)
         inputs,ys,zs = [None]*n,[None]*n,[None]*n
@@ -349,6 +371,7 @@ class MLP(Network):
             zs[i] = sigmoid(dot(self.W2,ys[i]))
         self.state = (inputs,ys,zs)
         return zs
+
     def backward(self,deltas):
         xs,ys,zs = self.state
         n = len(xs)
@@ -361,6 +384,7 @@ class MLP(Network):
         self.DW2 = sumouter(dzspre,ys)
         self.DW1 = sumouter(dyspre,xs)
         return dxs
+
     def weights(self):
         yield self.W1,self.DW1,"MLP1"
         yield self.W2,self.DW2,"MLP2"
@@ -427,18 +451,18 @@ def forward_py(n,N,ni,ns,na,xs,source,gix,gfx,gox,cix,gi,gf,go,ci,state,output,W
     assert not isnan(output[:n]).any()
 
 
-def backward_py(n,N,ni,ns,na,deltas,
+def backward_py(n, N, ni, ns, na, deltas,
                     source,
-                    gix,gfx,gox,cix,
-                    gi,gf,go,ci,
-                    state,output,
-                    WGI,WGF,WGO,WCI,
-                    WIP,WFP,WOP,
+                    gix, gfx, gox, cix,
+                    gi, gf, go, ci,
+                    state, output,
+                    WGI, WGF, WGO, WCI,
+                    WIP, WFP, WOP,
                     sourceerr,
-                    gierr,gferr,goerr,cierr,
-                    stateerr,outerr,
-                    DWGI,DWGF,DWGO,DWCI,
-                    DWIP,DWFP,DWOP):
+                    gierr, gferr, goerr, cierr,
+                    stateerr, outerr,
+                    DWGI, DWGF, DWGO, DWCI,
+                    DWIP, DWFP, DWOP):
     """Perform backward propagation of deltas for a simple LSTM layer."""
     for t in reversed(range(n)):
         outerr[t] = deltas[t]
@@ -468,24 +492,30 @@ def backward_py(n,N,ni,ns,na,deltas,
     DWGO = nutils.sumouter(goerr[:n],source[:n],out=DWGO)
     DWCI = nutils.sumouter(cierr[:n],source[:n],out=DWCI)
 
+
 class LSTM(Network):
     """A standard LSTM network. This is a direct implementation of all the forward
     and backward propagation formulas, mainly for speed. (There is another, more
     abstract implementation as well, but that's significantly slower in Python
     due to function call overhead.)"""
+
     def __init__(self,ni,ns,initial=initial_range,maxlen=5000):
         na = 1+ni+ns
         self.dims = ni,ns,na
         self.init_weights(initial)
         self.allocate(maxlen)
+
     def ninputs(self):
         return self.dims[0]
+
     def noutputs(self):
         return self.dims[1]
+
     def states(self):
         """Return the internal state array for the last forward
         propagation. This is mostly used for visualizations."""
         return array(self.state[:self.last_n])
+
     def init_weights(self,initial):
         "Initialize the weight matrices and derivatives"
         ni,ns,na = self.dims
@@ -533,6 +563,7 @@ class LSTM(Network):
         vars += " source sourceerr"
         for v in vars.split():
             getattr(self,v)[:,:] = nan
+
     def forward(self,xs):
         """Perform forward propagation of activations and update the
         internal state for a subsequent call to `backward`.
@@ -556,6 +587,7 @@ class LSTM(Network):
                    self.WIP,self.WFP,self.WOP)
         assert not isnan(self.output[:n]).any()
         return self.output[:n]
+
     def backward(self,deltas):
         """Perform backward propagation of deltas. Must be called after `forward`.
         Does not perform weight updating (for that, use the generic `update` method).
@@ -589,18 +621,23 @@ class Stacked(Network):
     def __init__(self,nets):
         self.nets = nets
         self.dstats = defaultdict(list)
+
     def walk(self):
         yield self
         for sub in self.nets:
             for x in sub.walk(): yield x
+
     def ninputs(self):
         return self.nets[0].ninputs()
+
     def noutputs(self):
         return self.nets[-1].noutputs()
+
     def forward(self,xs):
         for i,net in enumerate(self.nets):
             xs = net.forward(xs)
         return xs
+
     def backward(self,deltas):
         self.ldeltas = [deltas]
         for i,net in reversed(list(enumerate(self.nets))):
@@ -610,55 +647,74 @@ class Stacked(Network):
             self.ldeltas.append(deltas)
         self.ldeltas = self.ldeltas[::-1]
         return deltas
+
     def lastdeltas(self):
         return self.ldeltas[-1]
+
     def info(self):
         for net in self.nets:
             net.info()
+
     def states(self):
         return self.nets[0].states()
+
     def weights(self):
         for i,net in enumerate(self.nets):
             for w,dw,n in net.weights():
                 yield w,dw,"Stacked%d/%s"%(i,n)
 
+
 class Reversed(Network):
     """Run a network on the time-reversed input."""
+
     def __init__(self,net):
         self.net = net
+
     def walk(self):
         yield self
         for x in self.net.walk(): yield x
+
     def ninputs(self):
         return self.net.ninputs()
+
     def noutputs(self):
         return self.net.noutputs()
+
     def forward(self,xs):
         return self.net.forward(xs[::-1])[::-1]
+
     def backward(self,deltas):
         result = self.net.backward(deltas[::-1])
         return result[::-1] if result is not None else None
+
     def info(self):
         self.net.info()
+
     def states(self):
         return self.net.states()[::-1]
+
     def weights(self):
         for w,dw,n in self.net.weights():
             yield w,dw,"Reversed/%s"%n
 
+
 class Parallel(Network):
     """Run multiple networks in parallel on the same input."""
+
     def __init__(self,*nets):
         self.nets = nets
+
     def walk(self):
         yield self
         for sub in self.nets:
             for x in sub.walk(): yield x
+
     def forward(self,xs):
         outputs = [net.forward(xs) for net in self.nets]
         outputs = zip(*outputs)
         outputs = [concatenate(l) for l in outputs]
         return outputs
+
     def backward(self,deltas):
         deltas = array(deltas)
         start = 0
@@ -667,18 +723,22 @@ class Parallel(Network):
             net.backward(deltas[:,start:start+k])
             start += k
         return None
+
     def info(self):
         for net in self.nets:
             net.info()
+
     def states(self):
         # states = [net.states() for net in self.nets] # FIXME
         outputs = zip(*outputs)
         outputs = [concatenate(l) for l in outputs]
         return outputs
+
     def weights(self):
         for i,net in enumerate(self.nets):
             for w,dw,n in net.weights():
                 yield w,dw,"Parallel%d/%s"%(i,n)
+
 
 def MLP1(Ni,Ns,No):
     """An MLP implementation by stacking two `Logreg` networks on top
@@ -739,7 +799,6 @@ def translate_back0(outputs,threshold=0.25):
                 result.append(cs[i])
     return result
 
-from scipy.ndimage import measurements,filters
 
 def translate_back(outputs,threshold=0.7,pos=0):
     """Translate back. Thresholds on class 0, then assigns
@@ -747,7 +806,8 @@ def translate_back(outputs,threshold=0.7,pos=0):
     labels,n = measurements.label(outputs[:,0]<threshold)
     mask = tile(labels.reshape(-1,1),(1,outputs.shape[1]))
     maxima = measurements.maximum_position(outputs,mask,arange(1,amax(mask)+1))
-    if pos: return maxima
+    if pos:
+        return maxima
     return [c for (r,c) in maxima]
 
 def log_mul(x,y):
@@ -841,8 +901,10 @@ def normalize_nfkc(s):
 def add_training_info(network):
     return network
 
+
 class SeqRecognizer:
     """Perform sequence recognition using BIDILSTM and alignment."""
+
     def __init__(self,ninput,nstates,noutput=-1,codec=None,normalize=normalize_nfkc):
         self.Ni = ninput
         if codec: noutput = codec.size()
@@ -854,8 +916,11 @@ class SeqRecognizer:
         self.normalize = normalize
         self.codec = codec
         self.clear_log()
+
     def walk(self):
-        for x in self.lstm.walk(): yield x
+        for x in self.lstm.walk():
+            yield x
+
     def clear_log(self):
         self.command_log = []
         self.error_log = []
@@ -864,22 +929,27 @@ class SeqRecognizer:
     def __setstate__(self,state):
         self.__dict__.update(state)
         self.upgrade()
+
     def upgrade(self):
         if "last_trial" not in dir(self): self.last_trial = 0
         if "command_log" not in dir(self): self.command_log = []
         if "error_log" not in dir(self): self.error_log = []
         if "cerror_log" not in dir(self): self.cerror_log = []
         if "key_log" not in dir(self): self.key_log = []
+
     def info(self):
         self.net.info()
+
     def setLearningRate(self,r,momentum=0.9):
         self.lstm.setLearningRate(r,momentum)
+
     def predictSequence(self,xs):
         "Predict an integer sequence of codes."
         assert xs.shape[1]==self.Ni,\
             "wrong image height (image: %d, expected: %d)"%(xs.shape[1],self.Ni)
         self.outputs = array(self.lstm.forward(xs))
         return translate_back(self.outputs)
+
     def trainSequence(self,xs,cs,update=1,key=None):
         "Train with an integer sequence of codes."
         assert xs.shape[1]==self.Ni,"wrong image height"
@@ -903,12 +973,14 @@ class SeqRecognizer:
         # training keys
         self.key_log.append(key)
         return result
+
     # we keep track of errors within the object; this even gets
     # saved to give us some idea of the training history
     def errors(self,range=10000,smooth=0):
         result = self.error_log[-range:]
         if smooth>0: result = filters.gaussian_filter(result,smooth,mode='mirror')
         return result
+
     def cerrors(self,range=10000,smooth=0):
         result = [e*1.0/max(1,n) for e,n in self.cerror_log[-range:]]
         if smooth>0: result = filters.gaussian_filter(result,smooth,mode='mirror')
@@ -919,17 +991,21 @@ class SeqRecognizer:
         s = self.normalize(s)
         s = [c for c in s]
         return self.codec.encode(s)
+
     def l2s(self,l):
         "Convert a code sequence into a unicode string after recognition."
         l = self.codec.decode(l)
         return u"".join(l)
+
     def trainString(self,xs,s,update=1):
         "Perform training with a string. This uses the codec and normalizer."
         return self.trainSequence(xs,self.s2l(s),update=update)
+
     def predictString(self,xs):
         "Predict output as a string. This uses codec and normalizer."
         cs = self.predictSequence(xs)
         return self.l2s(cs)
+
 
 class Codec:
     """Translate between integer codes and characters."""
@@ -941,15 +1017,18 @@ class Codec:
             self.code2char[code] = char
             self.char2code[char] = code
         return self
+
     def size(self):
         """The total number of codes (use this for the number of output
         classes when training a classifier."""
         return len(list(self.code2char.keys()))
+
     def encode(self,s):
         "Encode the string `s` into a code sequence."
         # tab = self.char2code
         dflt = self.char2code["~"]
         return [self.char2code.get(c,dflt) for c in s]
+
     def decode(self,l):
         "Decode a code sequence into a string."
         s = [self.code2char.get(c,"~") for c in l]
