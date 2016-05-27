@@ -34,9 +34,6 @@ import unicodedata
 
 initial_range = 0.1
 
-class RangeError(Exception):
-    def __init__(self,s=None):
-        Exception.__init__(self,s)
 
 def prepare_line(line,pad=16):
     """Prepare a line for recognition; this inverts it, transposes

@@ -814,6 +814,20 @@ def deprecated(func):
     newFunc.__dict__.update(func.__dict__)
     return newFunc
 
+# colors for command line usage
+
+def red(text):
+    return '\033[0;31m%s\033[0m' % text
+
+def green(text):
+    return '\033[0;32m%s\033[0m' % text
+
+def yellow(text):
+    return '\033[0;33m%s\033[0m' % text
+
+def blue(text):
+    return '\033[0;34m%s\033[0m' % text
+
 ################################################################
 ### conversion functions
 ################################################################

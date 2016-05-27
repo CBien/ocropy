@@ -1,16 +1,17 @@
 #!/usr/bin/env python
-
+import traceback
 import random as pyrandom
-import re
-from pylab import *
-import os.path
-import ocrolib
 import argparse
+import re
+import os.path
+
+from pylab import *
+import ocrolib
 import matplotlib
 import numpy
 from ocrolib import lineest
 import ocrolib.lstm as lstm
-import traceback
+from ocrolib.common import green, yellow, red
 
 numpy.seterr(divide='raise',over='raise',invalid='raise',under='ignore')
 
@@ -41,8 +42,8 @@ parser.add_argument("-o","--output",default=None,
                     help="LSTM model file")
 parser.add_argument("-F","--savefreq",type=int,default=1000,
                     help="LSTM save frequency, default: %(default)s")
-parser.add_argument("--strip",action="store_false",
-                    help="strip the model before saving")
+parser.add_argument("--strip", action="store_false",
+                    help="DO NOT strip the model before saving (legacy option naming)")
 parser.add_argument("-N","--ntrain",type=int,default=1000000,
                     help="# lines to train before stopping, default: %(default)s")
 parser.add_argument("-t","--tests",default=None,
@@ -150,16 +151,18 @@ codec = lstm.Codec().init(charset)
 # Somewhat convoluted logic for dealing with old style Python
 # modules and new style C++ LSTM networks.
 
-def save_lstm(fname,network):
+def save_lstm(fname, network):
     if args.clstm:
         network.lstm.save(fname)
     else:
         if args.strip:
             network.clear_log()
-            for x in network.walk(): x.preSave()
-        ocrolib.save_object(fname,network)
+            for x in network.walk():
+                x.preSave()
+        ocrolib.save_object(fname, network)
         if args.strip:
-            for x in network.walk(): x.postLoad()
+            for x in network.walk():
+                x.postLoad()
 
 def load_lstm(fname):
     if args.clstm:
@@ -255,7 +258,7 @@ for trial in range(start,args.ntrain):
         fname = args.moviesample
         do_update = 0
     else:
-        fname = pyrandom.sample(inputs,1)[0]
+        fname = pyrandom.choice(inputs)
 
     base,_ = ocrolib.allsplitext(fname)
     try:
@@ -289,16 +292,15 @@ for trial in range(start,args.ntrain):
         traceback.print_exc()
         network = load_lstm(last_save)
         continue
-    except lstm.RangeError as e:
-        continue
     pred = "".join(codec.decode(pcs))
     acs = lstm.translate_back(network.aligned)
     gta = "".join(codec.decode(acs))
     if not args.quiet:
-        print "%d %.2f %s"%(trial,network.error,line.shape),fname
-        print "   TRU:",repr(transcript)
-        print "   ALN:",repr(gta[:len(transcript)+5])
-        print "   OUT:",repr(pred[:len(transcript)+5])
+        col_pred = red(pred) if pred != transcript else green(pred)
+        print "%d %.2f %s" % (trial, network.error, line.shape), fname
+        print "   TRU: <%s>     %r" % (green(transcript), transcript)
+        print "   ALN: <%s>     %r" % (yellow(gta), gta)
+        print "   OUT: <%s>     %r" % (col_pred, pred)
 
     pred = re.sub(' ','_',pred)
     gta = re.sub(' ','_',gta)
