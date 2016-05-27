@@ -415,6 +415,25 @@ def hprime(x,y=None):
     if y is None: y = tanh(x)
     return 1-y**2
 
+
+####    LSTM  Network weights   and   temporary variables     ####
+
+#      the gate weights include the 'b'-constants via source[0] = 1 ...
+GATE_WEIGHTS = 'WGI', 'WGF', 'WGO', 'WCI'
+PEEP_WEIGHTS = 'WIP', 'WFP', 'WOP'
+WEIGHTS = GATE_WEIGHTS + PEEP_WEIGHTS
+
+#     weigths for backward propagation
+DGATE_WEIGTHS = 'DWCI','DWGF', 'DWGI', 'DWGO'
+DPEEP_WEIGHTS = 'DWFP', 'DWIP', 'DWOP'
+D_WEIGHTS = DGATE_WEIGTHS + DPEEP_WEIGHTS
+
+#   temporary variables used during forward and backward propagation
+TEMP_VARS = ('ci', 'cierr', 'cix', 'gf', 'gferr', 'gfx', 'gi', 'gierr', 'gix',
+             'go', 'goerr', 'gox', 'outerr', 'output',
+             'source', 'sourceerr', 'state', 'stateerr')
+
+
 # These two routines have been factored out of the class in order to
 # make their conversion to native code easy; these are the "inner loops"
 # of the LSTM algorithm.
@@ -425,7 +444,10 @@ def hprime(x,y=None):
 # However, that is several times slower and the extra abstraction
 # isn't actually all that useful.
 
-def forward_py(n,N,ni,ns,na,xs,source,gix,gfx,gox,cix,gi,gf,go,ci,state,output,WGI,WGF,WGO,WCI,WIP,WFP,WOP):
+
+def forward_py(n, ni, ns, xs, source,
+               gix, gfx, gox, cix, gi, gf, go, ci, state, output,
+               WGI, WGF, WGO, WCI, WIP, WFP, WOP):
     """Perform forward propagation of activations for a simple LSTM layer."""
     for t in range(n):
         prev = zeros(ns) if t==0 else output[t-1]
@@ -520,48 +542,53 @@ class LSTM(Network):
         "Initialize the weight matrices and derivatives"
         ni,ns,na = self.dims
         # gate weights
-        for w in "WGI WGF WGO WCI".split():
-            setattr(self,w,randu(ns,na)*initial)
-            setattr(self,"D"+w,zeros((ns,na)))
+        for w in GATE_WEIGHTS:
+            setattr(self, w, randu(ns, na) * initial)
         # peep weights
-        for w in "WIP WFP WOP".split():
-            setattr(self,w,randu(ns)*initial)
-            setattr(self,"D"+w,zeros(ns))
+        for w in PEEP_WEIGHTS:
+            setattr(self, w, randu(ns) * initial)
+        self.init_back_weights()
+
+    def init_back_weights(self):
+        ni, ns, na = self.dims
+        for dgate in  DGATE_WEIGTHS:
+            setattr(self, dgate, zeros((ns, na)))
+        for dpeep in DPEEP_WEIGHTS:
+            setattr(self, dpeep, zeros(ns))
+
     def weights(self):
         "Yields all the weight and derivative matrices"
-        weights = "WGI WGF WGO WCI WIP WFP WOP"
-        for w in weights.split():
-            yield(getattr(self,w),getattr(self,"D"+w),w)
+        for w in WEIGHTS:
+            yield (getattr(self, w), getattr(self, "D" + w), w)
+
     def info(self):
         "Print info about the internal state"
-        vars = "WGI WGF WGO WIP WFP WOP cix ci gix gi gox go gfx gf"
-        vars += " source state output gierr gferr goerr cierr stateerr"
-        vars = vars.split()
-        vars = sorted(vars)
-        for v in vars:
-            a = array(getattr(self,v))
-            print v,a.shape,amin(a),amax(a)
+        for v in WEIGHTS + TEMP_VARS:
+            a = array(getattr(self, v))
+            print v, a.shape , amin(a), amax(a)
+
     def preSave(self):
         self.max_n = max(500,len(self.ci))
-        self.allocate(1)
+        for attrname in TEMP_VARS + D_WEIGHTS:
+            if hasattr(self, attrname):
+                delattr(self, attrname)
+
     def postLoad(self):
-        self.allocate(getattr(self,"max_n",5000))
+        self.allocate(getattr(self,"max_n", 5000))
+        self.init_back_weights()
+
     def allocate(self,n):
         """Allocate space for the internal state variables.
         `n` is the maximum sequence length that can be processed."""
-        ni,ns,na = self.dims
-        vars = "cix ci gix gi gox go gfx gf"
-        vars += " state output gierr gferr goerr cierr stateerr outerr"
-        for v in vars.split():
-            setattr(self,v,nan*ones((n,ns)))
-        self.source = nan*ones((n,na))
-        self.sourceerr = nan*ones((n,na))
+        ni, ns, na = self.dims
+        for v in TEMP_VARS:
+            setattr(self, v, nan * ones((n, ns)))
+        self.source = nan * ones((n, na))
+        self.sourceerr = nan * ones((n, na))
+
     def reset(self,n):
         """Reset the contents of the internal state variables to `nan`"""
-        vars = "cix ci gix gi gox go gfx gf"
-        vars += " state output gierr gferr goerr cierr stateerr outerr"
-        vars += " source sourceerr"
-        for v in vars.split():
+        for v in TEMP_VARS:
             getattr(self,v)[:,:] = nan
 
     def forward(self,xs):
@@ -575,10 +602,10 @@ class LSTM(Network):
         assert len(xs[0])==ni
         n = len(xs)
         self.last_n = n
-        N = len(self.gi)
-        if n>N: raise ocrolib.RecognitionError("input too large for LSTM model")
+        if n > len(self.gi):
+            raise ocrolib.RecognitionError("input too large for LSTM model")
         self.reset(n)
-        forward_py(n,N,ni,ns,na,xs,
+        forward_py(n, ni, ns, xs,
                    self.source,
                    self.gix,self.gfx,self.gox,self.cix,
                    self.gi,self.gf,self.go,self.ci,
